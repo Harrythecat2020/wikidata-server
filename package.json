@@ -1,0 +1,18 @@
+{
+  "name": "wikidata-api",
+  "version": "1.0.0",
+  "description": "Simple API for fetching Wikidata places per country",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
+  }
+}
