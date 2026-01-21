@@ -6,6 +6,8 @@ const app = express();
 app.use(cors());
 
 const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server gestart op port ${PORT}`));
+
 
 // Welke landen je ondersteunt
 const countryMap = {
@@ -249,3 +251,4 @@ app.get("/api/places/:country", async (req, res) => {
 app.listen(PORT, () => {
   console.log("Server gestart");
 });
+
