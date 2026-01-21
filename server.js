@@ -1,255 +1,255 @@
 import express from "express";
-import fetch from "node-fetch";
 import cors from "cors";
+import fetch from "node-fetch";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 app.use(cors());
 
+// === Static frontend (index.html) ===
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PUBLIC_DIR = path.join(__dirname, "public");
+app.use(express.static(PUBLIC_DIR));
+
+// Safety: altijd index.html teruggeven op "/"
+app.get("/", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server gestart op port ${PORT}`));
+const WDQS = "https://query.wikidata.org/sparql";
 
+// === Simple in-memory cache ===
+const cache = new Map(); // key -> { ts, data }
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 
-// Welke landen je ondersteunt
-const countryMap = {
-AF: "Q889",
-  AL: "Q222",
-  DZ: "Q262",
-  AD: "Q228",
-  AO: "Q916",
-  AG: "Q781",
-  AR: "Q414",
-  AM: "Q399",
-  AU: "Q408",
-  AT: "Q40",
-  AZ: "Q227",
-  BH: "Q398",
-  BD: "Q902",
-  BB: "Q244",
-  BY: "Q184",
-  BE: "Q31",
-  BZ: "Q242",
-  BJ: "Q962",
-  BT: "Q917",
-  BO: "Q750",
-  BA: "Q225",
-  BW: "Q963",
-  BR: "Q155",
-  BN: "Q921",
-  BG: "Q219",
-  BF: "Q965",
-  BI: "Q967",
-  KH: "Q424",
-  CM: "Q1009",
-  CA: "Q16",
-  CV: "Q1011",
-  CF: "Q929",
-  TD: "Q657",
-  CL: "Q298",
-  CO: "Q739",
-  KM: "Q970",
-  CR: "Q800",
-  HR: "Q224",
-  CU: "Q241",
-  CY: "Q229",
-  CZ: "Q213",
-  CD: "Q974",
-  DJ: "Q977",
-  DM: "Q784",
-  DO: "Q786",
-  EC: "Q736",
-  EG: "Q79",
-  SV: "Q792",
-  GQ: "Q983",
-  ER: "Q986",
-  EE: "Q191",
-  SZ: "Q1050",
-  ET: "Q115",
-  FM: "Q702",
-  FJ: "Q712",
-  FI: "Q33",
-  FR: "Q142",
-  GA: "Q1000",
-  GE: "Q230",
-  DE: "Q183",
-  GH: "Q117",
-  GR: "Q41",
-  GD: "Q769",
-  GT: "Q774",
-  GN: "Q1006",
-  GW: "Q1007",
-  GY: "Q734",
-  HT: "Q790",
-  HN: "Q783",
-  HU: "Q28",
-  IS: "Q189",
-  IN: "Q668",
-  ID: "Q252",
-  IR: "Q794",
-  IQ: "Q796",
-  IE: "Q27",
-  IL: "Q801",
-  IT: "Q38",
-  JM: "Q766",
-  JP: "Q17",
-  JO: "Q810",
-  KZ: "Q232",
-  KE: "Q114",
-  KI: "Q710",
-  KW: "Q817",
-  KG: "Q813",
-  LA: "Q819",
-  LV: "Q211",
-  LB: "Q822",
-  LS: "Q1013",
-  LR: "Q1014",
-  LY: "Q1016",
-  LI: "Q347",
-  LT: "Q37",
-  LU: "Q32",
-  MG: "Q1019",
-  MW: "Q1020",
-  MY: "Q833",
-  MV: "Q826",
-  ML: "Q912",
-  MT: "Q233",
-  MH: "Q709",
-  MR: "Q1025",
-  MU: "Q1027",
-  MX: "Q96",
-  MD: "Q217",
-  MC: "Q235",
-  MN: "Q711",
-  ME: "Q236",
-  MA: "Q1028",
-  MZ: "Q1029",
-  MM: "Q836",
-  NA: "Q1030",
-  NR: "Q697",
-  NP: "Q837",
-  NL: "Q55",
-  NZ: "Q664",
-  NI: "Q811",
-  NE: "Q1032",
-  NG: "Q1033",
-  KP: "Q423",
-  MK: "Q221",
-  NO: "Q20",
-  OM: "Q842",
-  PK: "Q843",
-  PW: "Q695",
-  PA: "Q804",
-  PG: "Q691",
-  PY: "Q733",
-  PE: "Q419",
-  PH: "Q928",
-  PL: "Q36",
-  PT: "Q45",
-  QA: "Q846",
-  CG: "Q971",
-  RO: "Q218",
-  RU: "Q159",
-  RW: "Q1037",
-  KN: "Q763",
-  LC: "Q760",
-  VC: "Q757",
-  WS: "Q683",
-  SM: "Q238",
-  SA: "Q851",
-  SN: "Q1041",
-  RS: "Q403",
-  SC: "Q1042",
-  SL: "Q1044",
-  SG: "Q334",
-  SK: "Q214",
-  SI: "Q215",
-  SB: "Q685",
-  SO: "Q1045",
-  ZA: "Q258",
-  KR: "Q884",
-  SS: "Q958",
-  ES: "Q29",
-  LK: "Q854",
-  SD: "Q1049",
-  SR: "Q730",
-  SE: "Q34",
-  CH: "Q39",
-  SY: "Q858",
-  ST: "Q1039",
-  TW: "Q865",
-  TJ: "Q863",
-  TZ: "Q924",
-  TH: "Q869",
-  TL: "Q574",
-  TG: "Q945",
-  TO: "Q678",
-  TT: "Q754",
-  TN: "Q948",
-  TR: "Q43",
-  TM: "Q874",
-  TV: "Q672",
-  UG: "Q1036",
-  UA: "Q212",
-  AE: "Q878",
-  GB: "Q145",
-  US: "Q30",
-  UY: "Q77",
-  UZ: "Q265",
-  VU: "Q686",
-  VA: "Q237",
-  VE: "Q717",
-  VN: "Q881",
-  YE: "Q805",
-  ZM: "Q953",
-  ZW: "Q954"
-};
-
-// Simpel geheugen (cache)
-const cache = {};
-const CACHE_TIME = 1000 * 60 * 60 * 24;
-
-app.get("/api/places/:country", async (req, res) => {
-  const code = req.params.country.toUpperCase();
-  const qid = countryMap[code];
-
-  if (!qid) {
-    return res.json([]);
+function getCache(key) {
+  const v = cache.get(key);
+  if (!v) return null;
+  if (Date.now() - v.ts > CACHE_TTL_MS) {
+    cache.delete(key);
+    return null;
   }
+  return v.data;
+}
 
-  // Check of we het al hebben
-  if (cache[code] && Date.now() - cache[code].time < CACHE_TIME) {
-    return res.json(cache[code].data);
-  }
+function setCache(key, data) {
+  cache.set(key, { ts: Date.now(), data });
+}
 
-  // Wikidata ophalen
-  const query = `
-  SELECT ?place ?placeLabel WHERE {
-    ?place wdt:P17 wd:${qid};
-           wdt:P31/wdt:P279* wd:Q570116.
-    SERVICE wikibase:label { bd:serviceParam wikibase:language "nl,en". }
-  }
-  LIMIT 10
-  `;
+function qidFromUri(uri) {
+  const m = /\/(Q\d+)$/.exec(String(uri || ""));
+  return m ? m[1] : "";
+}
 
-  const response = await fetch("https://query.wikidata.org/sparql", {
+function parseWktPoint(wkt) {
+  const m = /Point\(([-\d.]+)\s+([-\d.]+)\)/.exec(String(wkt || ""));
+  if (!m) return null;
+  const lon = Number(m[1]);
+  const lat = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
+function commonsImageUrl(fileUriOrName, width = 560) {
+  const u = String(fileUriOrName || "");
+  if (!u) return "";
+  if (u.includes("Special:FilePath/")) return `${u}?width=${encodeURIComponent(width)}`;
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(u)}?width=${encodeURIComponent(width)}`;
+}
+
+async function wdqsQuery(sparql) {
+  const body = new URLSearchParams({ query: sparql });
+
+  // WDQS is gevoelig voor “anonieme scripts”; User-Agent helpt vaak
+  const res = await fetch(WDQS, {
     method: "POST",
     headers: {
-      "Content-Type": "application/sparql-query",
-      "Accept": "application/json"
+      "Accept": "application/sparql-results+json",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "User-Agent": "wikidata-server.onrender.com (school project) - contact: none"
     },
-    body: query
+    body
   });
 
-  const json = await response.json();
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`WDQS fout: ${res.status} ${res.statusText} ${text.slice(0, 200)}`);
+  }
+  return res.json();
+}
 
-  const data = json.results.bindings.map(x => x.placeLabel.value);
+// === API ===
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 
-  cache[code] = { data, time: Date.now() };
+// Landinfo via ISO-numeric (zoals "528" voor Nederland)
+app.get("/api/country/:iso3", async (req, res) => {
+  const iso3 = String(req.params.iso3 || "").trim().padStart(3, "0");
+  const key = `country:${iso3}`;
 
-  res.json(data);
+  const cached = getCache(key);
+  if (cached) return res.json(cached);
+
+  try {
+    const sparql = `
+      SELECT ?country ?capitalLabel ?continentLabel ?population WHERE {
+        ?country wdt:P299 "${iso3}" .
+        OPTIONAL { ?country wdt:P36 ?capital . }
+        OPTIONAL { ?country wdt:P30 ?continent . }
+        OPTIONAL { ?country wdt:P1082 ?population . }
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "nl,en". }
+      }
+      LIMIT 1
+    `;
+
+    const data = await wdqsQuery(sparql);
+    const b = (data?.results?.bindings || [])[0] || {};
+    const uri = b.country?.value || "";
+    const countryQid = qidFromUri(uri);
+
+    const out = {
+      iso3,
+      countryQid,
+      wikidataUrl: uri || (countryQid ? `https://www.wikidata.org/wiki/${countryQid}` : ""),
+      meta: {
+        capital: b.capitalLabel?.value || "—",
+        continent: b.continentLabel?.value || "—",
+        population: b.population?.value || ""
+      }
+    };
+
+    setCache(key, out);
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Plekken in land via ISO-numeric
+app.get("/api/places/:iso3", async (req, res) => {
+  const iso3 = String(req.params.iso3 || "").trim().padStart(3, "0");
+  const limit = Math.max(1, Math.min(60, Number(req.query.limit || 30)));
+  const minSitelinks = Math.max(0, Number(req.query.minSitelinks || 0));
+  const key = `places:${iso3}:limit=${limit}:minSitelinks=${minSitelinks}`;
+
+  const cached = getCache(key);
+  if (cached) return res.json(cached);
+
+  try {
+    const sparql = `
+      SELECT ?place ?placeLabel ?placeDescription ?coord ?image ?sitelinks WHERE {
+        ?country wdt:P299 "${iso3}" .
+
+        ?place wdt:P625 ?coord .
+        ?place wdt:P17 ?country .
+
+        FILTER NOT EXISTS { ?place wdt:P31 wd:Q4167836 }   # Wikimedia disambiguation
+        FILTER NOT EXISTS { ?place wdt:P31 wd:Q13406463 }  # Wikimedia list article
+
+        OPTIONAL { ?place wdt:P18 ?image . }
+        OPTIONAL { ?place wikibase:sitelinks ?sitelinks . }
+
+        ${minSitelinks > 0 ? `FILTER(COALESCE(?sitelinks, 0) >= ${minSitelinks})` : ""}
+
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "nl,en". }
+      }
+      ORDER BY DESC(COALESCE(?sitelinks, 0))
+      LIMIT ${limit}
+    `;
+
+    const data = await wdqsQuery(sparql);
+    const rows = data?.results?.bindings || [];
+
+    const seen = new Set();
+    const places = [];
+
+    for (const r of rows) {
+      const placeUri = r.place?.value || "";
+      const qid = qidFromUri(placeUri);
+      if (!qid || seen.has(qid)) continue;
+
+      const p = parseWktPoint(r.coord?.value);
+      if (!p) continue;
+
+      seen.add(qid);
+
+      places.push({
+        qid,
+        label: r.placeLabel?.value || qid,
+        desc: r.placeDescription?.value || "",
+        lat: p.lat,
+        lng: p.lon,
+        image: r.image?.value ? commonsImageUrl(r.image.value, 560) : "",
+        sitelinks: r.sitelinks?.value ? Number(r.sitelinks.value) : 0,
+        wikidataUrl: placeUri
+      });
+    }
+
+    setCache(key, places);
+    res.json(places);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Detailinfo voor 1 plek (voor je detail-card)
+app.get("/api/place/:qid", async (req, res) => {
+  const qid = String(req.params.qid || "").trim();
+  if (!/^Q\d+$/.test(qid)) return res.status(400).json({ error: "Ongeldige QID" });
+
+  const key = `place:${qid}`;
+  const cached = getCache(key);
+  if (cached) return res.json(cached);
+
+  try {
+    const sparql = `
+      SELECT
+        (GROUP_CONCAT(DISTINCT ?typeLabel; separator=", ") AS ?types)
+        (SAMPLE(?website) AS ?website)
+        (SAMPLE(?inception) AS ?inception)
+        (SAMPLE(?population) AS ?population)
+        (SAMPLE(?area) AS ?area)
+        (SAMPLE(?countryLabel) AS ?countryLabel)
+        (SAMPLE(?adminLabel) AS ?adminLabel)
+        (SAMPLE(?image) AS ?image)
+      WHERE {
+        BIND(wd:${qid} AS ?place)
+        OPTIONAL { ?place wdt:P31 ?type . }
+        OPTIONAL { ?place wdt:P856 ?website . }
+        OPTIONAL { ?place wdt:P571 ?inception . }
+        OPTIONAL { ?place wdt:P1082 ?population . }
+        OPTIONAL { ?place wdt:P2046 ?area . }
+        OPTIONAL { ?place wdt:P17 ?country . }
+        OPTIONAL { ?place wdt:P131 ?admin . }
+        OPTIONAL { ?place wdt:P18 ?image . }
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "nl,en". }
+      }
+    `;
+
+    const data = await wdqsQuery(sparql);
+    const b = (data?.results?.bindings || [])[0] || {};
+    const img = b.image?.value ? commonsImageUrl(b.image.value, 760) : "";
+
+    const out = {
+      types: b.types?.value || "",
+      website: b.website?.value || "",
+      inception: b.inception?.value || "",
+      population: b.population?.value || "",
+      area: b.area?.value || "",
+      country: b.countryLabel?.value || "",
+      admin: b.adminLabel?.value || "",
+      image: img
+    };
+
+    setCache(key, out);
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 app.listen(PORT, () => {
-  console.log("Server gestart");
+  console.log(`Server gestart op port ${PORT}`);
 });
-
-
